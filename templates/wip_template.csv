@@ -1,0 +1,3 @@
+job_id,order_id,part_id,quantity,current_operation_seq,completed_qty,remaining_qty,current_resource,status
+JOB-001,SO-202605001,P-A320-01,100,10,40,60,CNC-01,生产中
+JOB-002,SO-202605002,P-B118-02,60,0,0,60,,未开工

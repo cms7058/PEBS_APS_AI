@@ -1,0 +1,20 @@
+.DS_Store
+
+# dependencies
+node_modules/
+app/node_modules/
+customer-validation-package/scripts/node_modules
+
+# build outputs
+dist/
+app/dist/
+*.tsbuildinfo
+
+# local/runtime noise
+.env
+.env.*
+*.log
+
+# generated scratch/output folders
+customer-validation-package/outputs/
+PEBS_APS_AI_客户验证包/

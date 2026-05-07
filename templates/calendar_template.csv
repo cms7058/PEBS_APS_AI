@@ -1,0 +1,4 @@
+calendar_id,date,shift_name,start_time,end_time,available,overtime_flag
+CAL-01,2026-05-11,白班,08:00,17:00,Y,N
+CAL-01,2026-05-11,晚班,18:00,22:00,Y,Y
+CAL-01,2026-05-12,白班,08:00,17:00,Y,N

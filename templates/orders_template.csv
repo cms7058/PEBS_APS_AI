@@ -1,0 +1,3 @@
+order_id,customer,part_id,quantity,due_time,priority,order_type,status
+SO-202605001,客户A,P-A320-01,100,2026-05-15 18:00,高,正式订单,待排产
+SO-202605002,客户B,P-B118-02,60,2026-05-16 12:00,中,正式订单,待排产

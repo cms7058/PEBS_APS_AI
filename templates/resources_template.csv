@@ -1,0 +1,4 @@
+resource_id,resource_name,resource_type,work_center,capability_tags,calendar_id,status,alternative_group
+CNC-01,CNC一号机,CNC,机加工,CNC_3AXIS|ROUGH,CAL-01,可用,CNC_ROUGH
+CNC-08,CNC八号机,CNC,机加工,CNC_5AXIS|PRECISION,CAL-01,可用,CNC_PRECISION
+LATHE-01,数控车床一号,Lathe,车削,LATHE|TURNING,CAL-01,可用,LATHE_STD

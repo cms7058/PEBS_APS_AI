@@ -1,0 +1,4 @@
+part_id,operation_seq,operation_code,operation_name,predecessor_seq,eligible_resources,setup_minutes,run_minutes_per_piece,inspection_minutes,outsourcing_flag,tooling_required
+P-A320-01,10,OP10,粗加工,,CNC-01|CNC-02,30,4,10,N,JIG-01
+P-A320-01,20,OP20,精加工,10,CNC-08|CNC-12,45,6,20,N,JIG-02
+P-B118-02,10,OP10,车削,,LATHE-01|LATHE-02,20,3,10,N,JIG-03
