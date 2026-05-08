@@ -11,6 +11,7 @@ const DIST_DIR = process.env.DIST_DIR ?? path.join(__dirname, 'dist');
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL ?? 'deepseek-v4-pro';
 const DEEPSEEK_BASE_URL = process.env.DEEPSEEK_BASE_URL ?? 'https://api.deepseek.com';
+const ALLOW_CLIENT_MODEL_CONFIG = process.env.ALLOW_CLIENT_MODEL_CONFIG === 'true';
 
 const readJson = (request) =>
   new Promise((resolve, reject) => {
@@ -102,7 +103,12 @@ const server = http.createServer(async (request, response) => {
   }
 
   if (request.method === 'GET' && request.url === '/api/health') {
-    sendJson(response, 200, { ok: true, model: DEEPSEEK_MODEL, hasApiKey: Boolean(DEEPSEEK_API_KEY) });
+    sendJson(response, 200, {
+      ok: true,
+      model: DEEPSEEK_MODEL,
+      hasApiKey: Boolean(DEEPSEEK_API_KEY),
+      allowClientModelConfig: ALLOW_CLIENT_MODEL_CONFIG,
+    });
     return;
   }
 
@@ -117,7 +123,7 @@ const server = http.createServer(async (request, response) => {
 
   try {
     const payload = await readJson(request);
-    const config = payload.config ?? {};
+    const config = ALLOW_CLIENT_MODEL_CONFIG ? (payload.config ?? {}) : {};
     const apiKey = config.apiKey || DEEPSEEK_API_KEY;
     const model = config.model || DEEPSEEK_MODEL;
     const baseUrl = (config.baseUrl || DEEPSEEK_BASE_URL).replace(/\/$/, '');

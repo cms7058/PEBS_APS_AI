@@ -54,6 +54,9 @@ cp .env.example .env
 DEEPSEEK_API_KEY=你的 DeepSeek API Key
 DEEPSEEK_MODEL=deepseek-v4-pro
 APP_PORT=8787
+VITE_ENABLE_TRIAL_RESET=false
+VITE_ENABLE_CLIENT_MODEL_CONFIG=false
+ALLOW_CLIENT_MODEL_CONFIG=false
 ```
 
 构建并启动：
@@ -82,3 +85,16 @@ docker compose down
 ```
 
 说明：当前 Docker 版本为单容器部署，容器内同时提供前端静态页面和 `/api/agent` 大模型代理接口。
+
+客户试用环境默认关闭：
+
+- 重置试用额度按钮。
+- 浏览器侧大模型配置和 API Key 输入。
+
+内部本地演示如需打开，可在构建前设置：
+
+```bash
+cd /Users/mingyue/PEBS_APS_AI/app
+VITE_ENABLE_TRIAL_RESET=true VITE_ENABLE_CLIENT_MODEL_CONFIG=true npm run build
+ALLOW_CLIENT_MODEL_CONFIG=true npm start
+```

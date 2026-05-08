@@ -114,7 +114,7 @@ PORT=8787 npm start
 
 ## DeepSeek V4 智能体
 
-右侧智能体对话已接入 DeepSeek V4 的本地代理服务。页面内提供“大模型配置”，用户可自行配置：
+右侧智能体对话已接入 DeepSeek V4 的本地代理服务。客户试用环境默认由服务端统一配置大模型，不展示浏览器侧 API Key 输入框。内部演示模式可开启页面内“大模型配置”，用户可自行配置：
 
 - 供应商：DeepSeek
 - 模型：`deepseek-v4-pro` 或 `deepseek-v4-flash`
@@ -144,6 +144,19 @@ npm run agent-server
 ```
 
 如果未配置 `DEEPSEEK_API_KEY`，页面不会中断，会自动降级到本地排产规则引擎回答。
+
+内部本地演示如需允许页面配置模型，需在构建和启动时开启：
+
+```bash
+VITE_ENABLE_CLIENT_MODEL_CONFIG=true npm run build
+ALLOW_CLIENT_MODEL_CONFIG=true npm start
+```
+
+客户试用环境默认不展示“重置额度”。内部演示如需开启：
+
+```bash
+VITE_ENABLE_TRIAL_RESET=true npm run build
+```
 
 当前默认模型：
 
@@ -179,6 +192,14 @@ cd /Users/mingyue/PEBS_APS_AI
 cp .env.example .env
 # 编辑 .env 填入 DEEPSEEK_API_KEY
 docker compose up -d --build
+```
+
+`.env` 中客户试用环境默认应保持：
+
+```env
+VITE_ENABLE_TRIAL_RESET=false
+VITE_ENABLE_CLIENT_MODEL_CONFIG=false
+ALLOW_CLIENT_MODEL_CONFIG=false
 ```
 
 默认访问：

@@ -47,6 +47,8 @@ const daysLeft = () => {
 
 const minutesToHours = (minutes: number) => `${(minutes / 60).toFixed(1)}h`;
 const trialStorageVersion = '2026-05-07-reset-runs-v1';
+const enableTrialReset = import.meta.env.VITE_ENABLE_TRIAL_RESET === 'true';
+const enableClientModelConfig = import.meta.env.VITE_ENABLE_CLIENT_MODEL_CONFIG === 'true';
 const createId = () =>
   globalThis.crypto?.randomUUID?.() ??
   `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
@@ -565,14 +567,14 @@ const summarizePlanForAgent = (plan: SchedulePlan) => ({
   })),
 });
 
-const askDeepSeek = async (question: string, plan: SchedulePlan, config: ModelConfig) => {
+const askDeepSeek = async (question: string, plan: SchedulePlan, config?: ModelConfig) => {
   const response = await fetch('/api/agent', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       question,
       plan: summarizePlanForAgent(plan),
-      config,
+      ...(config ? { config } : {}),
     }),
   });
   if (!response.ok) {
@@ -1113,10 +1115,14 @@ function AgentPanel({
   plan,
   trialLocked,
   onAction,
+  allowTrialReset,
+  allowClientModelConfig,
 }: {
   plan: SchedulePlan;
   trialLocked: boolean;
   onAction: (action: AgentAction) => void;
+  allowTrialReset: boolean;
+  allowClientModelConfig: boolean;
 }) {
   const delayedOrder = plan.operations.find((op) => op.delayMinutes > 0)?.orderId ?? plan.operations[0]?.orderId;
   const defaultQuestion = delayedOrder ? `为什么 ${delayedOrder} 延期？` : '今天的瓶颈设备是什么？';
@@ -1160,7 +1166,9 @@ function AgentPanel({
     simulate: ['sample-data', 'urgent', 'stop', 'shortage', 'base-schedule'],
     analysis: ['export', 'urgent', 'stop', 'shortage', 'reset-trial'],
   };
-  const actionCards = stageActions[agentStage].map((action) => cardCatalog[action]);
+  const actionCards = stageActions[agentStage]
+    .filter((action) => allowTrialReset || action !== 'reset-trial')
+    .map((action) => cardCatalog[action]);
   useEffect(() => {
     setQuestion(delayedOrder ? `为什么 ${delayedOrder} 延期？` : '今天的瓶颈设备是什么？');
   }, [delayedOrder, plan.id]);
@@ -1174,7 +1182,7 @@ function AgentPanel({
     saveModelConfig();
     setConfigStatus('正在测试模型连接...');
     try {
-      await askDeepSeek('请用一句话回复：模型连接成功。', plan, modelConfig);
+      await askDeepSeek('请用一句话回复：模型连接成功。', plan, allowClientModelConfig ? modelConfig : undefined);
       setConfigStatus(`${modelConfig.model} 连接成功，可以用于对话。`);
     } catch (error) {
       setConfigStatus(error instanceof Error ? `连接失败：${error.message}` : '连接失败：未知错误');
@@ -1190,7 +1198,7 @@ function AgentPanel({
     setQuestion('');
     setIsThinking(true);
     try {
-      const reply = await askDeepSeek(trimmed, plan, modelConfig);
+      const reply = await askDeepSeek(trimmed, plan, allowClientModelConfig ? modelConfig : undefined);
       setMessages((current) => [...current, { id: createId(), role: 'assistant', content: reply }]);
     } catch (error) {
       const fallback = buildAgentReply(trimmed, plan);
@@ -1231,10 +1239,12 @@ function AgentPanel({
         ))}
       </div>
       <div className="model-config">
-        <button className="config-toggle" onClick={() => setConfigOpen((current) => !current)}>
-          大模型配置：{modelConfig.model}
-        </button>
-        {configOpen && (
+        {allowClientModelConfig ? (
+          <>
+            <button className="config-toggle" onClick={() => setConfigOpen((current) => !current)}>
+              大模型配置：{modelConfig.model}
+            </button>
+            {configOpen && (
           <div className="model-config-body">
             <label>
               <span>供应商</span>
@@ -1267,6 +1277,12 @@ function AgentPanel({
               <button className="primary" onClick={() => void testModelConfig()}>测试连接</button>
             </div>
             <p>{configStatus}</p>
+          </div>
+            )}
+          </>
+        ) : (
+          <div className="model-config-body">
+            <p>大模型由服务端统一配置。客户试用环境不会暴露 API Key，也不能切换模型额度来源。</p>
           </div>
         )}
       </div>
@@ -1469,7 +1485,7 @@ function App() {
       <div className={`trial-notice ${trialLocked ? 'locked' : ''}`}>
         <ShieldAlert size={16} />
         <span>{trialLocked ? '试用已锁定：到期或今日排产额度用尽。历史方案可查看，新增导入和重排已禁用。' : `${trialNotice} 主要操作请从右侧智能体卡片开始。`}</span>
-        {trialLocked && <button className="notice-action" onClick={resetTrialRuns}>清零今日次数</button>}
+        {trialLocked && enableTrialReset && <button className="notice-action" onClick={resetTrialRuns}>清零今日次数</button>}
       </div>
 
       <section className="kpi-grid">
@@ -1520,7 +1536,13 @@ function App() {
         </div>
         <div className="right-column">
           <RiskPanel plan={plan} />
-          <AgentPanel plan={plan} trialLocked={trialLocked} onAction={handleAgentAction} />
+          <AgentPanel
+            plan={plan}
+            trialLocked={trialLocked}
+            onAction={handleAgentAction}
+            allowTrialReset={enableTrialReset}
+            allowClientModelConfig={enableClientModelConfig}
+          />
         </div>
       </section>
     </main>

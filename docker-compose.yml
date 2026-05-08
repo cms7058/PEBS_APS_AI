@@ -3,6 +3,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        VITE_ENABLE_TRIAL_RESET: ${VITE_ENABLE_TRIAL_RESET:-false}
+        VITE_ENABLE_CLIENT_MODEL_CONFIG: ${VITE_ENABLE_CLIENT_MODEL_CONFIG:-false}
     image: pebs-aps-ai:latest
     container_name: pebs-aps-ai
     restart: unless-stopped
