@@ -47,6 +47,9 @@ const daysLeft = () => {
 
 const minutesToHours = (minutes: number) => `${(minutes / 60).toFixed(1)}h`;
 const trialStorageVersion = '2026-05-07-reset-runs-v1';
+const createId = () =>
+  globalThis.crypto?.randomUUID?.() ??
+  `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 const subtractMinutes = (date: Date, minutes: number) => new Date(date.getTime() - minutes * 60_000);
 
 const formatExcelDateTime = (date: Date) =>
@@ -1120,7 +1123,7 @@ function AgentPanel({
   const [question, setQuestion] = useState(defaultQuestion);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
-      id: crypto.randomUUID(),
+      id: createId(),
       role: 'assistant',
       content: '你好，我是 DeepSeek V4 排产智能体。你可以问我订单延期、设备负荷、瓶颈资源、风险清单或计划员日报。',
     },
@@ -1182,17 +1185,17 @@ function AgentPanel({
     const trimmed = nextQuestion.trim();
     if (!trimmed || isThinking) return;
     setAgentStage(detectAgentStage(trimmed));
-    const userMessage: ChatMessage = { id: crypto.randomUUID(), role: 'user', content: trimmed };
+    const userMessage: ChatMessage = { id: createId(), role: 'user', content: trimmed };
     setMessages((current) => [...current, userMessage]);
     setQuestion('');
     setIsThinking(true);
     try {
       const reply = await askDeepSeek(trimmed, plan, modelConfig);
-      setMessages((current) => [...current, { id: crypto.randomUUID(), role: 'assistant', content: reply }]);
+      setMessages((current) => [...current, { id: createId(), role: 'assistant', content: reply }]);
     } catch (error) {
       const fallback = buildAgentReply(trimmed, plan);
       const suffix = error instanceof Error ? `\n\nDeepSeek V4 暂未接通：${error.message}。以上为本地排产规则引擎回答。` : '';
-      setMessages((current) => [...current, { id: crypto.randomUUID(), role: 'assistant', content: `${fallback}${suffix}` }]);
+      setMessages((current) => [...current, { id: createId(), role: 'assistant', content: `${fallback}${suffix}` }]);
     } finally {
       setIsThinking(false);
     }

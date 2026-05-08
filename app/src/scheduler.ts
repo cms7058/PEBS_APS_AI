@@ -1,5 +1,9 @@
 import type { CalendarSlot, Order, Resource, Routing, ScheduleKpi, SchedulePlan, ScheduledOperation, WipStatus } from './types';
 
+const createId = () =>
+  globalThis.crypto?.randomUUID?.() ??
+  `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+
 type SchedulerInput = {
   orders: Order[];
   routings: Routing[];
@@ -157,7 +161,7 @@ export const runSchedule = ({
 
   if (scheduled.length === 0) {
     return {
-      id: crypto.randomUUID(),
+      id: createId(),
       name: planName,
       generatedAt: new Date(),
       objective,
@@ -194,7 +198,7 @@ export const runSchedule = ({
   };
 
   return {
-    id: crypto.randomUUID(),
+    id: createId(),
     name: planName,
     generatedAt: new Date(),
     objective,
