@@ -1,0 +1,18 @@
+services:
+  pebs-aps-ai:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: pebs-aps-ai:latest
+    container_name: pebs-aps-ai
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${APP_PORT:-8787}:8787"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8787/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

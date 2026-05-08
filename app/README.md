@@ -84,6 +84,8 @@
 
 ## 启动
 
+### 本地开发
+
 ```bash
 cd /Users/mingyue/PEBS_APS_AI/app
 npm install
@@ -96,6 +98,20 @@ npm run dev -- --port 5173
 http://127.0.0.1:5173/
 ```
 
+本地如需启用 DeepSeek 代理：
+
+```bash
+export DEEPSEEK_API_KEY="你的 DeepSeek API Key"
+npm run agent-server
+```
+
+生产模式可先构建再启动单进程服务：
+
+```bash
+npm run build
+PORT=8787 npm start
+```
+
 ## DeepSeek V4 智能体
 
 右侧智能体对话已接入 DeepSeek V4 的本地代理服务。页面内提供“大模型配置”，用户可自行配置：
@@ -105,7 +121,7 @@ http://127.0.0.1:5173/
 - Base URL：默认 `https://api.deepseek.com`
 - API Key
 
-配置会保存在浏览器本地存储，并通过本地代理转发到 DeepSeek。为了让页面配置生效，需另开一个终端启动代理：
+配置会保存在浏览器本地存储，并通过 `/api/agent` 代理转发到 DeepSeek。本地开发时，如 Vite dev server 运行在 `5173` 端口，需要另开一个终端启动代理：
 
 ```bash
 cd /Users/mingyue/PEBS_APS_AI/app
@@ -121,10 +137,10 @@ export DEEPSEEK_BASE_URL="https://api.deepseek.com"
 npm run agent-server
 ```
 
-前端会调用：
+前端会调用相对路径：
 
 ```text
-http://127.0.0.1:8787/api/agent
+/api/agent
 ```
 
 如果未配置 `DEEPSEEK_API_KEY`，页面不会中断，会自动降级到本地排产规则引擎回答。
@@ -145,4 +161,35 @@ deepseek-v4-pro
 
 ```bash
 npm run build
+```
+
+## Docker 部署
+
+项目根目录已经提供：
+
+- `Dockerfile`
+- `docker-compose.yml`
+- `.env.example`
+- `.dockerignore`
+
+部署命令：
+
+```bash
+cd /Users/mingyue/PEBS_APS_AI
+cp .env.example .env
+# 编辑 .env 填入 DEEPSEEK_API_KEY
+docker compose up -d --build
+```
+
+默认访问：
+
+```text
+http://服务器IP:8787/
+```
+
+健康检查：
+
+```bash
+curl http://服务器IP:8787/health
+curl http://服务器IP:8787/api/health
 ```

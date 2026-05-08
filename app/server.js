@@ -1,6 +1,13 @@
 import http from 'node:http';
+import { createReadStream } from 'node:fs';
+import { stat } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const PORT = Number(process.env.AGENT_PORT ?? 8787);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PORT = Number(process.env.PORT ?? process.env.AGENT_PORT ?? 8787);
+const HOST = process.env.HOST ?? '0.0.0.0';
+const DIST_DIR = process.env.DIST_DIR ?? path.join(__dirname, 'dist');
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL ?? 'deepseek-v4-pro';
 const DEEPSEEK_BASE_URL = process.env.DEEPSEEK_BASE_URL ?? 'https://api.deepseek.com';
@@ -23,11 +30,48 @@ const readJson = (request) =>
 const sendJson = (response, status, payload) => {
   response.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
-    'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   });
   response.end(JSON.stringify(payload));
+};
+
+const mimeTypes = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.ico': 'image/x-icon',
+};
+
+const sendStatic = async (request, response) => {
+  const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);
+  const decodedPath = decodeURIComponent(url.pathname);
+  const requestedPath = decodedPath === '/' ? '/index.html' : decodedPath;
+  const safePath = path.normalize(requestedPath).replace(/^(\.\.[/\\])+/, '');
+  const filePath = path.join(DIST_DIR, safePath);
+  const fallbackPath = path.join(DIST_DIR, 'index.html');
+
+  try {
+    const fileStat = await stat(filePath);
+    if (!fileStat.isFile()) throw new Error('Not a file');
+    const ext = path.extname(filePath);
+    response.writeHead(200, {
+      'Content-Type': mimeTypes[ext] ?? 'application/octet-stream',
+      'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=31536000, immutable',
+    });
+    createReadStream(filePath).pipe(response);
+  } catch {
+    response.writeHead(200, {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-cache',
+    });
+    createReadStream(fallbackPath).pipe(response);
+  }
 };
 
 const buildPrompt = ({ question, plan }) => [
@@ -52,7 +96,21 @@ const server = http.createServer(async (request, response) => {
     return;
   }
 
+  if (request.method === 'GET' && request.url === '/health') {
+    sendJson(response, 200, { ok: true, service: 'pebs-aps-ai', model: DEEPSEEK_MODEL });
+    return;
+  }
+
+  if (request.method === 'GET' && request.url === '/api/health') {
+    sendJson(response, 200, { ok: true, model: DEEPSEEK_MODEL, hasApiKey: Boolean(DEEPSEEK_API_KEY) });
+    return;
+  }
+
   if (request.method !== 'POST' || request.url !== '/api/agent') {
+    if (request.method === 'GET') {
+      await sendStatic(request, response);
+      return;
+    }
     sendJson(response, 404, { error: 'Not found' });
     return;
   }
@@ -101,7 +159,7 @@ const server = http.createServer(async (request, response) => {
   }
 });
 
-server.listen(PORT, '127.0.0.1', () => {
-  console.log(`PEBS APS AI agent server listening on http://127.0.0.1:${PORT}`);
+server.listen(PORT, HOST, () => {
+  console.log(`PEBS APS AI server listening on http://${HOST}:${PORT}`);
   console.log(`DeepSeek model: ${DEEPSEEK_MODEL}`);
 });

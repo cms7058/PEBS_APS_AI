@@ -13,6 +13,7 @@ app/dist/
 # local/runtime noise
 .env
 .env.*
+!.env.example
 *.log
 
 # generated scratch/output folders

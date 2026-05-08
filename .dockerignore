@@ -1,0 +1,14 @@
+.git
+.DS_Store
+
+app/node_modules
+app/dist
+app/tsconfig.tsbuildinfo
+
+customer-validation-package/scripts/node_modules
+customer-validation-package/outputs
+PEBS_APS_AI_客户验证包
+
+*.log
+.env
+.env.*

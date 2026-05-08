@@ -563,7 +563,7 @@ const summarizePlanForAgent = (plan: SchedulePlan) => ({
 });
 
 const askDeepSeek = async (question: string, plan: SchedulePlan, config: ModelConfig) => {
-  const response = await fetch('http://127.0.0.1:8787/api/agent', {
+  const response = await fetch('/api/agent', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
