@@ -49,7 +49,7 @@ const daysLeft = () => {
 };
 
 const inviteVerifyUrl = '/api/invite-verify';
-const authRedirectUrl = 'https://lingcan.pebs.online/';
+const authRedirectUrl = 'https://lingcan.pebs.online/#/pages/copilot/index';
 const authStorageKey = 'pebs-aps-ai-trial-auth';
 const minutesToHours = (minutes: number) => `${(minutes / 60).toFixed(1)}h`;
 const trialStorageVersion = '2026-05-07-reset-runs-v1';
@@ -703,8 +703,7 @@ function AuthGate({ onVerified }: { onVerified: (auth: TrialAuth) => void }) {
       localStorage.setItem(authStorageKey, JSON.stringify(auth));
       onVerified(auth);
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : '验证失败，即将跳转。');
-      window.location.assign(authRedirectUrl);
+      setStatus(error instanceof Error ? error.message : '验证失败，请确认邮箱和邀请码，或前往产品中心申请。');
     } finally {
       setIsChecking(false);
     }
@@ -745,6 +744,9 @@ function AuthGate({ onVerified }: { onVerified: (auth: TrialAuth) => void }) {
           </label>
           <button className="primary auth-submit" disabled={isChecking}>
             <LogIn size={17} />{isChecking ? '验证中...' : '进入试用'}
+          </button>
+          <button type="button" className="secondary auth-submit" disabled={isChecking} onClick={() => window.location.assign(authRedirectUrl)}>
+            申请或查看邀请码
           </button>
           <p className="auth-status">{status}</p>
         </form>
@@ -1748,7 +1750,6 @@ function Root() {
       .then(() => setTrialAuth(storedAuth))
       .catch(() => {
         localStorage.removeItem(authStorageKey);
-        window.location.assign(authRedirectUrl);
       })
       .finally(() => setIsCheckingStoredAuth(false));
   }, []);
