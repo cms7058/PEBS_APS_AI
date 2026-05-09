@@ -654,15 +654,15 @@ const getVerifyMessage = (payload: unknown) => {
       : '邀请码或邮箱未通过验证';
 };
 
-const verifyInvite = async (email: string, inviteCode: string) => {
+const verifyInvite = async (email: string, inviteCode: string, action: 'bindInvite' | 'checkAccess' = 'bindInvite') => {
   const response = await fetch(inviteVerifyUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      action: 'verifyInvite',
+      action,
       email,
-      inviteCode,
-      code: inviteCode,
+      userEmail: email,
+      ...(action === 'bindInvite' ? { inviteCode, code: inviteCode } : {}),
     }),
   });
   const text = await response.text();
@@ -1746,7 +1746,7 @@ function Root() {
       setIsCheckingStoredAuth(false);
       return;
     }
-    verifyInvite(storedAuth.email, storedAuth.inviteCode)
+    verifyInvite(storedAuth.email, storedAuth.inviteCode, 'checkAccess')
       .then(() => setTrialAuth(storedAuth))
       .catch(() => {
         localStorage.removeItem(authStorageKey);

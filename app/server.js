@@ -1,4 +1,5 @@
 import http from 'node:http';
+import crypto from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -15,6 +16,9 @@ const ALLOW_CLIENT_MODEL_CONFIG = process.env.ALLOW_CLIENT_MODEL_CONFIG === 'tru
 const INVITE_VERIFY_URL =
   process.env.INVITE_VERIFY_URL ??
   'https://fc-mp-ad17509f-ebae-4693-974b-769771dd93c5.next.bspapp.com/pebs-copilot-api';
+const INVITE_APP_ID = process.env.INVITE_APP_ID ?? '';
+const INVITE_APP_SECRET = process.env.INVITE_APP_SECRET ?? '';
+const INVITE_PRODUCT_KEY = process.env.INVITE_PRODUCT_KEY ?? 'aps-copilot';
 
 const readJson = (request) =>
   new Promise((resolve, reject) => {
@@ -38,6 +42,48 @@ const sendJson = (response, status, payload) => {
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   });
   response.end(JSON.stringify(payload));
+};
+
+const signInvitePayload = (timestamp, rawBody) =>
+  crypto
+    .createHmac('sha256', INVITE_APP_SECRET)
+    .update(`${timestamp}.${rawBody}`)
+    .digest('hex');
+
+const sendInviteRequest = async (payload) => {
+  if (!INVITE_APP_ID || !INVITE_APP_SECRET) {
+    return {
+      status: 500,
+      data: {
+        code: 500,
+        message: '邀请码校验服务未配置 INVITE_APP_ID 或 INVITE_APP_SECRET',
+      },
+    };
+  }
+
+  const body = JSON.stringify({
+    productKey: INVITE_PRODUCT_KEY,
+    ...payload,
+  });
+  const timestamp = String(Date.now());
+  const upstream = await fetch(INVITE_VERIFY_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-App-Id': INVITE_APP_ID,
+      'X-Timestamp': timestamp,
+      'X-Signature': signInvitePayload(timestamp, body),
+    },
+    body,
+  });
+  const text = await upstream.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = { body: text };
+  }
+  return { status: upstream.status, data };
 };
 
 const mimeTypes = {
@@ -111,6 +157,7 @@ const server = http.createServer(async (request, response) => {
       model: DEEPSEEK_MODEL,
       hasApiKey: Boolean(DEEPSEEK_API_KEY),
       allowClientModelConfig: ALLOW_CLIENT_MODEL_CONFIG,
+      inviteVerifierConfigured: Boolean(INVITE_APP_ID && INVITE_APP_SECRET),
     });
     return;
   }
@@ -118,19 +165,8 @@ const server = http.createServer(async (request, response) => {
   if (request.method === 'POST' && request.url === '/api/invite-verify') {
     try {
       const payload = await readJson(request);
-      const upstream = await fetch(INVITE_VERIFY_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const text = await upstream.text();
-      let data;
-      try {
-        data = text ? JSON.parse(text) : {};
-      } catch {
-        data = { body: text };
-      }
-      sendJson(response, upstream.ok ? 200 : upstream.status, data);
+      const { status, data } = await sendInviteRequest(payload);
+      sendJson(response, status >= 200 && status < 300 ? 200 : status, data);
     } catch (error) {
       sendJson(response, 500, { error: error instanceof Error ? error.message : 'Invite verification failed' });
     }
