@@ -48,7 +48,7 @@ const daysLeft = () => {
   return Math.max(0, Math.ceil((end.getTime() - now.getTime()) / 86_400_000));
 };
 
-const inviteVerifyUrl = 'https://fc-mp-ad17509f-ebae-4693-974b-769771dd93c5.next.bspapp.com/pebs-copilot-api';
+const inviteVerifyUrl = '/api/invite-verify';
 const authRedirectUrl = 'https://lingcan.pebs.online/';
 const authStorageKey = 'pebs-aps-ai-trial-auth';
 const minutesToHours = (minutes: number) => `${(minutes / 60).toFixed(1)}h`;

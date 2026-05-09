@@ -12,6 +12,9 @@ const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL ?? 'deepseek-v4-pro';
 const DEEPSEEK_BASE_URL = process.env.DEEPSEEK_BASE_URL ?? 'https://api.deepseek.com';
 const ALLOW_CLIENT_MODEL_CONFIG = process.env.ALLOW_CLIENT_MODEL_CONFIG === 'true';
+const INVITE_VERIFY_URL =
+  process.env.INVITE_VERIFY_URL ??
+  'https://fc-mp-ad17509f-ebae-4693-974b-769771dd93c5.next.bspapp.com/pebs-copilot-api';
 
 const readJson = (request) =>
   new Promise((resolve, reject) => {
@@ -109,6 +112,28 @@ const server = http.createServer(async (request, response) => {
       hasApiKey: Boolean(DEEPSEEK_API_KEY),
       allowClientModelConfig: ALLOW_CLIENT_MODEL_CONFIG,
     });
+    return;
+  }
+
+  if (request.method === 'POST' && request.url === '/api/invite-verify') {
+    try {
+      const payload = await readJson(request);
+      const upstream = await fetch(INVITE_VERIFY_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const text = await upstream.text();
+      let data;
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        data = { body: text };
+      }
+      sendJson(response, upstream.ok ? 200 : upstream.status, data);
+    } catch (error) {
+      sendJson(response, 500, { error: error instanceof Error ? error.message : 'Invite verification failed' });
+    }
     return;
   }
 
