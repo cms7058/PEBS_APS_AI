@@ -49,7 +49,7 @@ const daysLeft = () => {
 };
 
 const inviteVerifyUrl = 'https://fc-mp-ad17509f-ebae-4693-974b-769771dd93c5.next.bspapp.com/pebs-copilot-api';
-const authRedirectUrl = 'https://lingcan.pebs.online/copilot/index';
+const authRedirectUrl = 'https://lingcan.pebs.online/';
 const authStorageKey = 'pebs-aps-ai-trial-auth';
 const minutesToHours = (minutes: number) => `${(minutes / 60).toFixed(1)}h`;
 const trialStorageVersion = '2026-05-07-reset-runs-v1';
@@ -615,13 +615,16 @@ const isVerificationPassed = (payload: unknown) => {
   if (!payload || typeof payload !== 'object') return false;
   const data = payload as Record<string, unknown>;
   const nested = typeof data.data === 'object' && data.data ? (data.data as Record<string, unknown>) : {};
+  const code = data.code ?? nested.code;
   return (
     data.ok === true ||
     data.success === true ||
     data.valid === true ||
     data.authorized === true ||
-    data.code === 0 ||
-    data.code === '0' ||
+    code === 0 ||
+    code === '0' ||
+    code === 200 ||
+    code === '200' ||
     nested.ok === true ||
     nested.success === true ||
     nested.valid === true ||
@@ -629,20 +632,44 @@ const isVerificationPassed = (payload: unknown) => {
   );
 };
 
+const normalizeVerifyPayload = (payload: unknown) => {
+  if (!payload || typeof payload !== 'object') return payload;
+  const data = payload as Record<string, unknown>;
+  if (typeof data.body !== 'string') return payload;
+  try {
+    return JSON.parse(data.body);
+  } catch {
+    return payload;
+  }
+};
+
+const getVerifyMessage = (payload: unknown) => {
+  if (!payload || typeof payload !== 'object') return '邀请码或邮箱未通过验证';
+  const data = payload as Record<string, unknown>;
+  const nested = typeof data.data === 'object' && data.data ? (data.data as Record<string, unknown>) : {};
+  return typeof data.message === 'string'
+    ? data.message
+    : typeof nested.message === 'string'
+      ? nested.message
+      : '邀请码或邮箱未通过验证';
+};
+
 const verifyInvite = async (email: string, inviteCode: string) => {
   const response = await fetch(inviteVerifyUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
+      action: 'verifyInvite',
       email,
       inviteCode,
       code: inviteCode,
     }),
   });
   const text = await response.text();
-  const payload = text ? JSON.parse(text) : {};
+  const rawPayload = text ? JSON.parse(text) : {};
+  const payload = normalizeVerifyPayload(rawPayload);
   if (!response.ok || !isVerificationPassed(payload)) {
-    throw new Error(typeof payload?.message === 'string' ? payload.message : '邀请码或邮箱未通过验证');
+    throw new Error(getVerifyMessage(payload));
   }
 };
 
