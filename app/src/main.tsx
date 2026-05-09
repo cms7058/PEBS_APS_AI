@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import * as XLSX from 'xlsx';
 import {
@@ -13,11 +13,13 @@ import {
   Gauge,
   KeyRound,
   LogIn,
+  LogOut,
   Mail,
   Play,
   RefreshCw,
   ShieldAlert,
   Upload,
+  UserCheck,
   Wrench,
 } from 'lucide-react';
 import {
@@ -51,6 +53,8 @@ const daysLeft = () => {
 const inviteVerifyUrl = '/api/invite-verify';
 const authRedirectUrl = 'https://lingcan.pebs.online/#/pages/copilot/index';
 const authStorageKey = 'pebs-aps-ai-trial-auth';
+const authActivityStorageKey = 'pebs-aps-ai-last-activity';
+const authInactivityMs = 30 * 60 * 1000;
 const minutesToHours = (minutes: number) => `${(minutes / 60).toFixed(1)}h`;
 const trialStorageVersion = '2026-05-07-reset-runs-v1';
 const enableTrialReset = import.meta.env.VITE_ENABLE_TRIAL_RESET === 'true';
@@ -155,7 +159,17 @@ function KpiCard({ icon, label, value, tone }: { icon: React.ReactNode; label: s
   );
 }
 
-function TrialBar({ runsToday, locked }: { runsToday: number; locked: boolean }) {
+function TrialBar({
+  runsToday,
+  locked,
+  auth,
+  onLogout,
+}: {
+  runsToday: number;
+  locked: boolean;
+  auth: TrialAuth;
+  onLogout: () => void;
+}) {
   const left = daysLeft();
   return (
     <section className="trial-bar">
@@ -167,6 +181,8 @@ function TrialBar({ runsToday, locked }: { runsToday: number; locked: boolean })
         <span><CalendarClock size={16} />剩余 {left} 天</span>
         <span className={locked ? 'locked' : ''}><RefreshCw size={16} />今日排产 {runsToday}/{trialState.dailyRunsLimit}</span>
         <span><ShieldAlert size={16} />试用版限制：50 台设备 / 500 订单 / 5 个方案</span>
+        <span className="login-status"><UserCheck size={16} />已登录：{auth.email}</span>
+        <button className="logout-button" onClick={onLogout}><LogOut size={16} />退出登录</button>
       </div>
     </section>
   );
@@ -598,14 +614,29 @@ const askDeepSeek = async (question: string, plan: SchedulePlan, config?: ModelC
 
 const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
+const clearTrialAuth = () => {
+  localStorage.removeItem(authStorageKey);
+  localStorage.removeItem(authActivityStorageKey);
+};
+
+const recordAuthActivity = () => {
+  localStorage.setItem(authActivityStorageKey, String(Date.now()));
+};
+
 const loadTrialAuth = (): TrialAuth | null => {
   try {
     const stored = localStorage.getItem(authStorageKey);
     if (!stored) return null;
     const parsed = JSON.parse(stored) as TrialAuth;
+    const storedActivity = localStorage.getItem(authActivityStorageKey);
+    const lastActivity = storedActivity ? Number(storedActivity) : Date.parse(parsed.verifiedAt);
+    if (lastActivity && Date.now() - lastActivity > authInactivityMs) {
+      clearTrialAuth();
+      return null;
+    }
     return parsed.email && parsed.inviteCode ? parsed : null;
   } catch {
-    localStorage.removeItem(authStorageKey);
+    clearTrialAuth();
     return null;
   }
 };
@@ -701,6 +732,7 @@ function AuthGate({ onVerified }: { onVerified: (auth: TrialAuth) => void }) {
         verifiedAt: new Date().toISOString(),
       };
       localStorage.setItem(authStorageKey, JSON.stringify(auth));
+      recordAuthActivity();
       onVerified(auth);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : '验证失败，请确认邮箱和邀请码，或前往产品中心申请。');
@@ -1505,7 +1537,7 @@ function AgentPanel({
   );
 }
 
-function App() {
+function App({ auth, onLogout }: { auth: TrialAuth; onLogout: () => void }) {
   const [orders, setOrders] = useState(sampleOrders);
   const [resources, setResources] = useState(sampleResources);
   const [routings, setRoutings] = useState(sampleRoutings);
@@ -1667,7 +1699,7 @@ function App() {
 
   return (
     <main className="app-shell">
-      <TrialBar runsToday={runsToday} locked={trialLocked} />
+      <TrialBar runsToday={runsToday} locked={trialLocked} auth={auth} onLogout={onLogout} />
 
       <div className={`trial-notice ${trialLocked ? 'locked' : ''}`}>
         <ShieldAlert size={16} />
@@ -1739,6 +1771,10 @@ function App() {
 function Root() {
   const [trialAuth, setTrialAuth] = useState<TrialAuth | null>(null);
   const [isCheckingStoredAuth, setIsCheckingStoredAuth] = useState(true);
+  const logout = useCallback(() => {
+    clearTrialAuth();
+    setTrialAuth(null);
+  }, []);
 
   useEffect(() => {
     const storedAuth = loadTrialAuth();
@@ -1747,16 +1783,43 @@ function Root() {
       return;
     }
     verifyInvite(storedAuth.email, storedAuth.inviteCode, 'checkAccess')
-      .then(() => setTrialAuth(storedAuth))
+      .then(() => {
+        recordAuthActivity();
+        setTrialAuth(storedAuth);
+      })
       .catch(() => {
-        localStorage.removeItem(authStorageKey);
+        clearTrialAuth();
       })
       .finally(() => setIsCheckingStoredAuth(false));
   }, []);
 
+  useEffect(() => {
+    if (!trialAuth) return;
+
+    let timeoutId: number | undefined;
+    const activityEvents = ['mousemove', 'mousedown', 'keydown', 'input', 'touchstart', 'scroll', 'wheel', 'click'];
+    const resetInactivityTimer = () => {
+      recordAuthActivity();
+      window.clearTimeout(timeoutId);
+      timeoutId = window.setTimeout(logout, authInactivityMs);
+    };
+
+    resetInactivityTimer();
+    activityEvents.forEach((eventName) => {
+      window.addEventListener(eventName, resetInactivityTimer, { passive: true });
+    });
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      activityEvents.forEach((eventName) => {
+        window.removeEventListener(eventName, resetInactivityTimer);
+      });
+    };
+  }, [logout, trialAuth]);
+
   if (isCheckingStoredAuth) return <AuthLoading />;
   if (!trialAuth) return <AuthGate onVerified={setTrialAuth} />;
-  return <App />;
+  return <App auth={trialAuth} onLogout={logout} />;
 }
 
 createRoot(document.getElementById('root')!).render(<Root />);

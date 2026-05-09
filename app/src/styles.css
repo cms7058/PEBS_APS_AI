@@ -205,6 +205,28 @@ p {
   color: #a83d34;
 }
 
+.trial-metrics span.login-status {
+  background: #e7f3f0;
+  color: #0f6f64;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logout-button {
+  min-height: 32px;
+  border-color: #d8e0e6;
+  background: #ffffff;
+  color: #4d5f70;
+  font-size: 13px;
+}
+
+.logout-button:hover {
+  border-color: #a83d34;
+  color: #a83d34;
+}
+
 .toolbar {
   margin-top: 14px;
   display: flex;
