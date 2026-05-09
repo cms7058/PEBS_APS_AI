@@ -11,6 +11,9 @@ import {
   Factory,
   FileDown,
   Gauge,
+  KeyRound,
+  LogIn,
+  Mail,
   Play,
   RefreshCw,
   ShieldAlert,
@@ -45,6 +48,9 @@ const daysLeft = () => {
   return Math.max(0, Math.ceil((end.getTime() - now.getTime()) / 86_400_000));
 };
 
+const inviteVerifyUrl = 'https://fc-mp-ad17509f-ebae-4693-974b-769771dd93c5.next.bspapp.com/pebs-copilot-api';
+const authRedirectUrl = 'https://lingcan.pebs.online/copilot/index';
+const authStorageKey = 'pebs-aps-ai-trial-auth';
 const minutesToHours = (minutes: number) => `${(minutes / 60).toFixed(1)}h`;
 const trialStorageVersion = '2026-05-07-reset-runs-v1';
 const enableTrialReset = import.meta.env.VITE_ENABLE_TRIAL_RESET === 'true';
@@ -229,6 +235,11 @@ type ModelConfig = {
   model: string;
   baseUrl: string;
   apiKey: string;
+};
+type TrialAuth = {
+  email: string;
+  inviteCode: string;
+  verifiedAt: string;
 };
 
 const workspaceCopy: Record<WorkspaceMode, { title: string; desc: string }> = {
@@ -584,6 +595,153 @@ const askDeepSeek = async (question: string, plan: SchedulePlan, config?: ModelC
   const data = await response.json();
   return data.content as string;
 };
+
+const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+const loadTrialAuth = (): TrialAuth | null => {
+  try {
+    const stored = localStorage.getItem(authStorageKey);
+    if (!stored) return null;
+    const parsed = JSON.parse(stored) as TrialAuth;
+    return parsed.email && parsed.inviteCode ? parsed : null;
+  } catch {
+    localStorage.removeItem(authStorageKey);
+    return null;
+  }
+};
+
+const isVerificationPassed = (payload: unknown) => {
+  if (payload === true) return true;
+  if (!payload || typeof payload !== 'object') return false;
+  const data = payload as Record<string, unknown>;
+  const nested = typeof data.data === 'object' && data.data ? (data.data as Record<string, unknown>) : {};
+  return (
+    data.ok === true ||
+    data.success === true ||
+    data.valid === true ||
+    data.authorized === true ||
+    data.code === 0 ||
+    data.code === '0' ||
+    nested.ok === true ||
+    nested.success === true ||
+    nested.valid === true ||
+    nested.authorized === true
+  );
+};
+
+const verifyInvite = async (email: string, inviteCode: string) => {
+  const response = await fetch(inviteVerifyUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email,
+      inviteCode,
+      code: inviteCode,
+    }),
+  });
+  const text = await response.text();
+  const payload = text ? JSON.parse(text) : {};
+  if (!response.ok || !isVerificationPassed(payload)) {
+    throw new Error(typeof payload?.message === 'string' ? payload.message : '邀请码或邮箱未通过验证');
+  }
+};
+
+function AuthGate({ onVerified }: { onVerified: (auth: TrialAuth) => void }) {
+  const [email, setEmail] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
+  const [status, setStatus] = useState('请输入邮箱和邀请码，通过验证后进入试用。');
+  const [isChecking, setIsChecking] = useState(false);
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedInviteCode = inviteCode.trim();
+    if (!isValidEmail(normalizedEmail)) {
+      setStatus('请先输入有效邮箱。');
+      return;
+    }
+    if (!normalizedInviteCode) {
+      setStatus('请输入邀请码。');
+      return;
+    }
+    setIsChecking(true);
+    setStatus('正在校验试用资格...');
+    try {
+      await verifyInvite(normalizedEmail, normalizedInviteCode);
+      const auth = {
+        email: normalizedEmail,
+        inviteCode: normalizedInviteCode,
+        verifiedAt: new Date().toISOString(),
+      };
+      localStorage.setItem(authStorageKey, JSON.stringify(auth));
+      onVerified(auth);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : '验证失败，即将跳转。');
+      window.location.assign(authRedirectUrl);
+    } finally {
+      setIsChecking(false);
+    }
+  };
+
+  return (
+    <main className="auth-shell">
+      <section className="auth-panel">
+        <div className="auth-brand">
+          <div className="auth-mark"><Factory size={24} /></div>
+          <div>
+            <div className="eyebrow">PEBS APS AI</div>
+            <h1>试用资格验证</h1>
+            <p>使用排产智能体前，需要输入已授权的邀请码和邮箱。</p>
+          </div>
+        </div>
+        <form className="auth-form" onSubmit={submit}>
+          <label>
+            <span><Mail size={16} />邮箱</span>
+            <input
+              type="email"
+              value={email}
+              autoComplete="email"
+              placeholder="name@company.com"
+              onChange={(event) => setEmail(event.target.value)}
+              disabled={isChecking}
+            />
+          </label>
+          <label>
+            <span><KeyRound size={16} />邀请码</span>
+            <input
+              value={inviteCode}
+              autoComplete="one-time-code"
+              placeholder="请输入邀请码"
+              onChange={(event) => setInviteCode(event.target.value)}
+              disabled={isChecking}
+            />
+          </label>
+          <button className="primary auth-submit" disabled={isChecking}>
+            <LogIn size={17} />{isChecking ? '验证中...' : '进入试用'}
+          </button>
+          <p className="auth-status">{status}</p>
+        </form>
+      </section>
+    </main>
+  );
+}
+
+function AuthLoading() {
+  return (
+    <main className="auth-shell">
+      <section className="auth-panel">
+        <div className="auth-brand">
+          <div className="auth-mark"><Factory size={24} /></div>
+          <div>
+            <div className="eyebrow">PEBS APS AI</div>
+            <h1>正在验证试用资格</h1>
+            <p>系统正在通过云函数确认邀请码和邮箱。</p>
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
 
 function DataPanel({
   orders,
@@ -1549,4 +1707,28 @@ function App() {
   );
 }
 
-createRoot(document.getElementById('root')!).render(<App />);
+function Root() {
+  const [trialAuth, setTrialAuth] = useState<TrialAuth | null>(null);
+  const [isCheckingStoredAuth, setIsCheckingStoredAuth] = useState(true);
+
+  useEffect(() => {
+    const storedAuth = loadTrialAuth();
+    if (!storedAuth) {
+      setIsCheckingStoredAuth(false);
+      return;
+    }
+    verifyInvite(storedAuth.email, storedAuth.inviteCode)
+      .then(() => setTrialAuth(storedAuth))
+      .catch(() => {
+        localStorage.removeItem(authStorageKey);
+        window.location.assign(authRedirectUrl);
+      })
+      .finally(() => setIsCheckingStoredAuth(false));
+  }, []);
+
+  if (isCheckingStoredAuth) return <AuthLoading />;
+  if (!trialAuth) return <AuthGate onVerified={setTrialAuth} />;
+  return <App />;
+}
+
+createRoot(document.getElementById('root')!).render(<Root />);
