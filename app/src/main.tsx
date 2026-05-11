@@ -52,10 +52,9 @@ const daysLeft = () => {
 
 const inviteVerifyUrl = '/api/invite-verify';
 const authRedirectUrl = 'https://lingcan.pebs.online/#/pages/copilot/index';
-const inviteProductKey = 'lean-copilot';
 const authStorageKey = 'pebs-aps-ai-trial-auth';
 const authActivityStorageKey = 'pebs-aps-ai-last-activity';
-const authInactivityMs = 5 * 60 * 1000;
+const authInactivityMs = 30 * 60 * 1000;
 const minutesToHours = (minutes: number) => `${(minutes / 60).toFixed(1)}h`;
 const trialStorageVersion = '2026-05-07-reset-runs-v1';
 const enableTrialReset = import.meta.env.VITE_ENABLE_TRIAL_RESET === 'true';
@@ -648,15 +647,11 @@ const isVerificationPassed = (payload: unknown) => {
   const data = payload as Record<string, unknown>;
   const nested = typeof data.data === 'object' && data.data ? (data.data as Record<string, unknown>) : {};
   const code = data.code ?? nested.code;
-  const status = data.status ?? nested.status;
   return (
     data.ok === true ||
     data.success === true ||
     data.valid === true ||
     data.authorized === true ||
-    status === 'active' ||
-    data.access === true ||
-    nested.access === true ||
     code === 0 ||
     code === '0' ||
     code === 200 ||
@@ -690,15 +685,15 @@ const getVerifyMessage = (payload: unknown) => {
       : '邀请码或邮箱未通过验证';
 };
 
-const verifyInvite = async (email: string, inviteCode: string) => {
+const verifyInvite = async (email: string, inviteCode: string, action: 'bindInvite' | 'checkAccess' = 'bindInvite') => {
   const response = await fetch(inviteVerifyUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      action: 'loginWithInvite',
-      productKey: inviteProductKey,
+      action,
       email,
-      inviteCode,
+      userEmail: email,
+      ...(action === 'bindInvite' ? { inviteCode, code: inviteCode } : {}),
     }),
   });
   const text = await response.text();
@@ -712,8 +707,7 @@ const verifyInvite = async (email: string, inviteCode: string) => {
 function AuthGate({ onVerified }: { onVerified: (auth: TrialAuth) => void }) {
   const [email, setEmail] = useState('');
   const [inviteCode, setInviteCode] = useState('');
-  const [status, setStatus] = useState('请输入邮箱和邀请码，通过验证后进入 Lean Copilot 内测。');
-  const [showApplyInvite, setShowApplyInvite] = useState(false);
+  const [status, setStatus] = useState('请输入邮箱和邀请码，通过验证后进入试用。');
   const [isChecking, setIsChecking] = useState(false);
 
   const submit = async (event: React.FormEvent) => {
@@ -722,17 +716,14 @@ function AuthGate({ onVerified }: { onVerified: (auth: TrialAuth) => void }) {
     const normalizedInviteCode = inviteCode.trim();
     if (!isValidEmail(normalizedEmail)) {
       setStatus('请先输入有效邮箱。');
-      setShowApplyInvite(false);
       return;
     }
     if (!normalizedInviteCode) {
       setStatus('请输入邀请码。');
-      setShowApplyInvite(false);
       return;
     }
     setIsChecking(true);
-    setShowApplyInvite(false);
-    setStatus('正在校验内测资格...');
+    setStatus('正在校验试用资格...');
     try {
       await verifyInvite(normalizedEmail, normalizedInviteCode);
       const auth = {
@@ -744,8 +735,7 @@ function AuthGate({ onVerified }: { onVerified: (auth: TrialAuth) => void }) {
       recordAuthActivity();
       onVerified(auth);
     } catch (error) {
-      setShowApplyInvite(true);
-      setStatus(error instanceof Error ? error.message : '未注册用户');
+      setStatus(error instanceof Error ? error.message : '验证失败，请确认邮箱和邀请码，或前往产品中心申请。');
     } finally {
       setIsChecking(false);
     }
@@ -758,15 +748,9 @@ function AuthGate({ onVerified }: { onVerified: (auth: TrialAuth) => void }) {
           <div className="auth-mark"><Factory size={24} /></div>
           <div>
             <div className="eyebrow">PEBS APS AI</div>
-            <h1>Lean Copilot 内测登录</h1>
-            <p>使用内测能力前，需要输入已授权的邮箱和邀请码。</p>
+            <h1>试用资格验证</h1>
+            <p>使用排产智能体前，需要输入已授权的邀请码和邮箱。</p>
           </div>
-        </div>
-        <div className="auth-benefits">
-          <div><CheckCircle2 size={16} /><span>默认权限：企业版</span></div>
-          <div><CalendarClock size={16} /><span>有效时间：14 天内测</span></div>
-          <div><Database size={16} /><span>导入 / 导出额度：10 / 10</span></div>
-          <div><ShieldAlert size={16} /><span>邀请码准入，服务端统一校验</span></div>
         </div>
         <form className="auth-form" onSubmit={submit}>
           <label>
@@ -790,16 +774,13 @@ function AuthGate({ onVerified }: { onVerified: (auth: TrialAuth) => void }) {
               disabled={isChecking}
             />
           </label>
-          {showApplyInvite ? (
-            <button type="button" className="secondary auth-submit" disabled={isChecking} onClick={() => window.location.assign(authRedirectUrl)}>
-              申请邀请码
-            </button>
-          ) : (
-            <button className="primary auth-submit" disabled={isChecking}>
-              <LogIn size={17} />{isChecking ? '验证中...' : '验证并进入'}
-            </button>
-          )}
-          <p className={`auth-status ${showApplyInvite ? 'muted' : ''}`}>{showApplyInvite ? '未注册用户' : status}</p>
+          <button className="primary auth-submit" disabled={isChecking}>
+            <LogIn size={17} />{isChecking ? '验证中...' : '进入试用'}
+          </button>
+          <button type="button" className="secondary auth-submit" disabled={isChecking} onClick={() => window.location.assign(authRedirectUrl)}>
+            申请或查看邀请码
+          </button>
+          <p className="auth-status">{status}</p>
         </form>
       </section>
     </main>
@@ -1801,7 +1782,7 @@ function Root() {
       setIsCheckingStoredAuth(false);
       return;
     }
-    verifyInvite(storedAuth.email, storedAuth.inviteCode)
+    verifyInvite(storedAuth.email, storedAuth.inviteCode, 'checkAccess')
       .then(() => {
         recordAuthActivity();
         setTrialAuth(storedAuth);
