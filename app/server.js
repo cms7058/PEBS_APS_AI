@@ -18,7 +18,7 @@ const INVITE_VERIFY_URL =
   'https://fc-mp-ad17509f-ebae-4693-974b-769771dd93c5.next.bspapp.com/pebs-copilot-api';
 const INVITE_APP_ID = process.env.INVITE_APP_ID ?? '';
 const INVITE_APP_SECRET = process.env.INVITE_APP_SECRET ?? '';
-const INVITE_PRODUCT_KEY = process.env.INVITE_PRODUCT_KEY ?? 'aps-copilot';
+const INVITE_PRODUCT_KEY = process.env.INVITE_PRODUCT_KEY ?? 'lean-copilot';
 
 const readJson = (request) =>
   new Promise((resolve, reject) => {
