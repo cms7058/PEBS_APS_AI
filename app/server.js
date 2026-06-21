@@ -4,6 +4,7 @@ import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { APS_REGISTER_HTML, handleConnect, handleStatus, handleSync } from './aps-amiba.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT ?? process.env.AGENT_PORT ?? 8787);
@@ -169,6 +170,33 @@ const server = http.createServer(async (request, response) => {
       sendJson(response, status >= 200 && status < 300 ? 200 : status, data);
     } catch (error) {
       sendJson(response, 500, { error: error instanceof Error ? error.message : 'Invite verification failed' });
+    }
+    return;
+  }
+
+  // 阿米巴接入落地页（服务端渲染，自包含）
+  if (request.method === 'GET' && (request.url === '/register' || request.url?.startsWith('/register?'))) {
+    response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
+    response.end(APS_REGISTER_HTML);
+    return;
+  }
+
+  // 阿米巴接入 API
+  if (request.url?.startsWith('/api/amiba/')) {
+    try {
+      let result;
+      if (request.method === 'POST' && request.url === '/api/amiba/connect') {
+        result = await handleConnect(await readJson(request));
+      } else if (request.method === 'GET' && request.url === '/api/amiba/status') {
+        result = await handleStatus();
+      } else if (request.method === 'POST' && request.url === '/api/amiba/sync') {
+        result = await handleSync(await readJson(request));
+      } else {
+        result = { status: 404, body: { error: 'Not found' } };
+      }
+      sendJson(response, result.status, result.body);
+    } catch (error) {
+      sendJson(response, 500, { error: error instanceof Error ? error.message : 'amiba 接入处理失败' });
     }
     return;
   }
