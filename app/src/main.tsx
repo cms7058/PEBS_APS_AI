@@ -15,6 +15,7 @@ import {
   LogIn,
   LogOut,
   Mail,
+  Package,
   Play,
   RefreshCw,
   ShieldAlert,
@@ -188,6 +189,95 @@ function TrialBar({
   );
 }
 
+interface AmibaProject {
+  id: string; enterpriseName?: string; partNo?: string; productName?: string;
+  status: string; totalSeconds: number; manHours: number; laborCost: number; laborRate: number;
+  tasks: { id: string; running: boolean; status: string }[];
+  report?: { ok: boolean; error?: string } | null;
+}
+const hmsTimer = (sec: number) => {
+  sec = Math.max(0, Math.floor(sec));
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+  const z = (n: number) => (n < 10 ? '0' : '') + n;
+  return `${z(h)}:${z(m)}:${z(s)}`;
+};
+
+// 阿米巴模式：从「重新接入/换令牌（带产品）」进入 APS 时，顶部内嵌该产品的计时横幅，
+// 计时随你在 APS 里实际排产作业而走；点「提交并回传工时」把工时回传到阿米巴该产品。
+function AmibaProjectBanner() {
+  const [ctx] = useState<{ projectId?: string; productName?: string; partNo?: string; enterpriseName?: string } | null>(() => {
+    try { return JSON.parse(localStorage.getItem('pebs-aps-amiba-project') || 'null'); } catch { return null; }
+  });
+  const [proj, setProj] = useState<AmibaProject | null>(null);
+  const fetchedAt = useRef<number>(Date.now());
+  const [, setTick] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!ctx?.projectId) return;
+    try {
+      const r = await fetch(`/api/amiba/projects/${ctx.projectId}`);
+      if (r.ok) { setProj(await r.json()); fetchedAt.current = Date.now(); }
+    } catch { /* ignore */ }
+  }, [ctx]);
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => { const t = setInterval(() => setTick((x) => x + 1), 1000); return () => clearInterval(t); }, []);
+
+  if (!ctx?.projectId) return null;
+  const running = !!proj && proj.status !== 'submitted' && proj.tasks.some((t) => t.running);
+  const liveTotal = (proj?.totalSeconds || 0) + (running ? (Date.now() - fetchedAt.current) / 1000 : 0);
+  const submitted = proj?.status === 'submitted';
+
+  const act = async (action: 'start' | 'stop') => {
+    const t = proj?.tasks[0];
+    if (!ctx?.projectId || !t) return;
+    try {
+      const r = await fetch(`/api/amiba/projects/${ctx.projectId}/tasks/${t.id}/${action}`, { method: 'POST' });
+      if (r.ok) { setProj(await r.json()); fetchedAt.current = Date.now(); }
+    } catch { /* ignore */ }
+  };
+  const submit = async () => {
+    if (!confirm('提交本产品的排产工时？将停止计时并回传到阿米巴。')) return;
+    setSubmitting(true);
+    try {
+      const r = await fetch(`/api/amiba/projects/${ctx.projectId}/submit`, { method: 'POST' });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || '提交失败');
+      setProj(d); fetchedAt.current = Date.now();
+      localStorage.removeItem('pebs-aps-amiba-project');
+    } catch (e) { alert((e as Error).message); }
+    finally { setSubmitting(false); }
+  };
+
+  return (
+    <section style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12, padding: '12px 16px', margin: '0 0 12px', borderRadius: 12, border: '1px solid #7c3aed55', background: 'linear-gradient(135deg,#1e1233,#100a1c)', color: '#ddd6fe' }}>
+      <Package size={18} />
+      <div>
+        <div style={{ fontSize: 14, fontWeight: 700 }}>阿米巴项目 · {ctx.enterpriseName || proj?.enterpriseName || ''}</div>
+        <div style={{ fontSize: 12, color: '#b6a6da' }}>{ctx.productName || proj?.productName} <span style={{ fontFamily: 'monospace' }}>{ctx.partNo || proj?.partNo}</span> · 排产作业计时{submitted ? ' · 已提交' : (running ? ' · 计时中' : '')}</div>
+      </div>
+      <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
+        <div style={{ fontSize: 22, fontWeight: 700, fontFamily: 'monospace', color: '#a78bfa' }}>{hmsTimer(liveTotal)}</div>
+        <div style={{ fontSize: 11, color: '#b6a6da' }}>{(liveTotal / 3600).toFixed(2)}h{proj ? ` · 估 ¥${Math.round(liveTotal / 3600 * proj.laborRate).toLocaleString('zh-CN')}` : ''}</div>
+      </div>
+      {!submitted && proj && (
+        running
+          ? <button className="logout-button" onClick={() => act('stop')} style={{ background: '#f59e0b', color: '#1c1207' }}>暂停计时</button>
+          : <button className="logout-button" onClick={() => act('start')} style={{ background: '#10b981', color: '#04130c' }}>开始计时</button>
+      )}
+      {!submitted ? (
+        <button className="logout-button" disabled={submitting} onClick={submit} style={{ background: '#7c3aed', color: '#fff' }}>
+          {submitting ? '提交中…' : '提交并回传工时'}
+        </button>
+      ) : (
+        <span style={{ fontSize: 12, color: proj?.report?.ok ? '#6ee7b7' : '#fcd34d' }}>
+          {proj?.report?.ok ? `已回传 ${proj.manHours}h` : `回传失败：${proj?.report?.error || ''}`}
+        </span>
+      )}
+    </section>
+  );
+}
+
 const csvExamples: Record<ImportKind, string> = {
   orders:
     'order_id,customer,part_id,quantity,due_time,priority,order_type,status\nSO-NEW-001,客户X,P-A320-01,30,2026-05-12 16:00,高,正式订单,待排产',
@@ -256,6 +346,7 @@ type TrialAuth = {
   email: string;
   inviteCode: string;
   verifiedAt: string;
+  source?: string; // 'amiba' = 阿米巴平台令牌登录，已服务端核验，跳过远程邀请码校验
 };
 
 const workspaceCopy: Record<WorkspaceMode, { title: string; desc: string }> = {
@@ -1700,6 +1791,7 @@ function App({ auth, onLogout }: { auth: TrialAuth; onLogout: () => void }) {
   return (
     <main className="app-shell">
       <TrialBar runsToday={runsToday} locked={trialLocked} auth={auth} onLogout={onLogout} />
+      <AmibaProjectBanner />
 
       <div className={`trial-notice ${trialLocked ? 'locked' : ''}`}>
         <ShieldAlert size={16} />
@@ -1779,6 +1871,13 @@ function Root() {
   useEffect(() => {
     const storedAuth = loadTrialAuth();
     if (!storedAuth) {
+      setIsCheckingStoredAuth(false);
+      return;
+    }
+    // 阿米巴平台令牌登录的会话已在服务端核验，跳过远程邀请码二次校验，直接放行进操作页
+    if (storedAuth.source === 'amiba') {
+      recordAuthActivity();
+      setTrialAuth(storedAuth);
       setIsCheckingStoredAuth(false);
       return;
     }

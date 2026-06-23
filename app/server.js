@@ -4,7 +4,7 @@ import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { APS_REGISTER_HTML, handleConnect, handleStatus, handleSync } from './aps-amiba.js';
+import { APS_REGISTER_HTML, APS_LAUNCH_HTML, APS_WORKBENCH_HTML, handleConnect, handleStatus, handleSync, handleLaunch, handleReport, handlePlatformLogin, handleProjectGet, handleTaskAction, handleSubmitProject } from './aps-amiba.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT ?? process.env.AGENT_PORT ?? 8787);
@@ -181,16 +181,38 @@ const server = http.createServer(async (request, response) => {
     return;
   }
 
+  // 阿米巴平台登录落地页（产品工作台跳来：核验平台令牌 → 解锁 APS → 进入排产）
+  if (request.method === 'GET' && (request.url === '/amiba/launch' || request.url?.startsWith('/amiba/launch?'))) {
+    response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
+    response.end(APS_LAUNCH_HTML);
+    return;
+  }
+
   // 阿米巴接入 API
   if (request.url?.startsWith('/api/amiba/')) {
     try {
       let result;
+      const amibaPath = new URL(request.url, `http://${request.headers.host ?? 'localhost'}`).pathname;
+      // /api/amiba/projects/:id 及其子操作
+      const projMatch = amibaPath.match(/^\/api\/amiba\/projects\/([^/]+)(?:\/tasks\/([^/]+)\/(start|stop|done)|\/(submit))?$/);
       if (request.method === 'POST' && request.url === '/api/amiba/connect') {
         result = await handleConnect(await readJson(request));
       } else if (request.method === 'GET' && request.url === '/api/amiba/status') {
         result = await handleStatus();
       } else if (request.method === 'POST' && request.url === '/api/amiba/sync') {
         result = await handleSync(await readJson(request));
+      } else if (request.method === 'POST' && request.url === '/api/amiba/launch') {
+        result = await handleLaunch(await readJson(request));
+      } else if (request.method === 'POST' && request.url === '/api/amiba/platform-login') {
+        result = await handlePlatformLogin(await readJson(request));
+      } else if (request.method === 'POST' && request.url === '/api/amiba/report') {
+        result = await handleReport(await readJson(request));
+      } else if (projMatch && request.method === 'GET' && !projMatch[2] && !projMatch[4]) {
+        result = await handleProjectGet(projMatch[1]);
+      } else if (projMatch && request.method === 'POST' && projMatch[2] && projMatch[3]) {
+        result = await handleTaskAction(projMatch[1], projMatch[2], projMatch[3]);
+      } else if (projMatch && request.method === 'POST' && projMatch[4] === 'submit') {
+        result = await handleSubmitProject(projMatch[1]);
       } else {
         result = { status: 404, body: { error: 'Not found' } };
       }
